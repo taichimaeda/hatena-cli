@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "hatena-cli"
+version = "0.1.0"
+description = ""
+authors = ["Taichi Maeda <taichi.maeda.up@gmail.com>"]
+readme = "README.md"
+packages = [{include = "hatena_cli"}]
+
+
+[tool.poetry.scripts]
+hatena = "hatena_cli.main:app"
+
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = {extras = ["all"], version = "^0.9.0"}
+requests = "^2.31.0"
+requests-oauthlib = "^1.3.1"
+beautifulsoup4 = "^4.12.2"
+typing-extensions = "^4.7.0"
+toml = "^0.10.2"
+flatdict = "^4.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
