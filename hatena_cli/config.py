@@ -58,6 +58,7 @@ def check_config():
         with open(_TEMPLATE_PATH, "w") as file:
             file.write(_DEFAULT_TEMPLATE)
 
+    global _config
     if _config is None:
         _config = _Config(toml.load(_CONFIG_PATH))
 

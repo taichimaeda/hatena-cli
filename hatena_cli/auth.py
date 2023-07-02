@@ -5,8 +5,7 @@ from requests_oauthlib import OAuth1
 import requests
 import typer
 
-from hatena_cli.api import Spinner
-
+from .cli import Spinner
 from .config import get_config, set_config
 
 
@@ -33,7 +32,7 @@ def check_auth():
     api_key = get_config("auth:api_key")
     api_secret = get_config("auth:api_secret")
 
-    if access_token != "" or access_secret != "" or datetime.now() >= expires:
+    if access_token == "" or access_secret == "" or datetime.now() >= expires:
         access_token, access_secret = _get_access_token(api_key, api_secret)
         expires = datetime.now() + timedelta(days=60)
 

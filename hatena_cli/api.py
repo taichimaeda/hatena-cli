@@ -7,40 +7,17 @@ from pathlib import Path
 from requests_oauthlib import OAuth1
 from bs4 import BeautifulSoup
 from rich import print
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-    TimeRemainingColumn,
-)
+
 import typer
 
+from .cli import ProgressBar, Spinner
+from .auth import get_auth
 from .config import get_config
 
 
-_HATENA_BLOG_URL = f"https://blog.hatena.ne.jp/"
+_HATENA_BLOG_URL = f"https://blog.hatena.ne.jp"
 _HATENA_FOTOLIFE_POST_URL = "https://f.hatena.ne.jp/atom/post"
 _HATENA_FOTOLIFE_EDIT_URL = "https://f.hatena.ne.jp/atom/edit"
-
-
-class Spinner(Progress):
-    def __init__(self):
-        super().__init__(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-        )
-
-
-class ProgressBar(Progress):
-    def __init__(self):
-        super().__init__(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TimeRemainingColumn(elapsed_when_finished=True),
-        )
 
 
 def _convert(blog_path: Path = None):
@@ -48,16 +25,16 @@ def _convert(blog_path: Path = None):
         progress.add_task("Converting Markdown to HTML...")
 
         pandoc_path = get_config("path:pandoc")
-        template_path = get_config("path:tempalte")
+        template_path = get_config("path:template")
         os.system(
             f"{pandoc_path} --quiet --standalone --template '{template_path}' \
-                    --output '{blog_path.with_suffix('.html')}' '{blog_path}'"
+                            --output '{blog_path.with_suffix('.html')}' '{blog_path}'"
         )
 
 
 def upload_entry(blog_title: str, blog_path: Path, with_images: bool, publish: bool):
     _convert(blog_path)
-    auth = auth.get()
+    auth = get_auth()
     if with_images:
         _upload_images(blog_title, blog_path, auth)
     _upload_html(blog_title, blog_path, publish, auth)
@@ -74,15 +51,17 @@ def _upload_images(blog_title: str, blog_path: Path, auth: OAuth1):
         task = progress.add_task("Uploading images...", total=total)
 
         def callback(match: re.Match):
-            progress.advance(task, 1)
             image_path = parse.unquote(match.group(1))
             image_url = _upload_image(blog_title, image_path, auth)
+            progress.advance(task, 1)
             return image_replace.replace(r"\1", image_url)
 
-        re.sub(image_pattern, callback, content)
+        content = re.sub(image_pattern, callback, content)
+        with open(blog_path.with_suffix(".html"), mode="w") as file:
+            file.write(content)
 
 
-def _upload_image(blog_title: str, image_path: Path, auth: OAuth1) -> Path:
+def _upload_image(blog_title: str, image_path: Path, auth: OAuth1) -> str:
     with open(image_path, mode="rb") as file:
         content = file.read()
         content = base64.b64encode(content).decode()
@@ -108,14 +87,14 @@ def _upload_image(blog_title: str, image_path: Path, auth: OAuth1) -> Path:
 
     xml = BeautifulSoup(res.text, features="xml")
     url = xml.find("entry").find("hatena:imageurl").text
-    return Path(url)
+    return url
 
 
 def _upload_html(blog_title: str, blog_path: Path, publish: bool, auth: OAuth1):
     with Spinner() as progress:
         progress.add_task("Uploading HTML...")
 
-        with open(blog_path.with_suffix("html"), mode="r") as file:
+        with open(blog_path.with_suffix(".html"), mode="r") as file:
             content = file.read()
 
         username = get_config("blog:username")
@@ -126,13 +105,13 @@ def _upload_html(blog_title: str, blog_path: Path, publish: bool, auth: OAuth1):
             timeout=None,
             headers={"Content-Type": "application/xml; charset=utf-8"},
             data=f"""\
-    <?xml version="1.0" encoding="utf-8"?>
-    <entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
-        <title>{blog_title}</title>
-        <author><name>name</name></author>
-        <content type="text/html"><![CDATA[{content}]]></content>
-        <app:control><app:draft>{'no' if publish else 'yes'}</app:draft></app:control>
-    </entry>""".encode(
+<?xml version="1.0" encoding="utf-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
+    <title>{blog_title}</title>
+    <author><name>name</name></author>
+    <content type="text/html"><![CDATA[{content}]]></content>
+    <app:control><app:draft>{'no' if publish else 'yes'}</app:draft></app:control>
+</entry>""".encode(
                 "utf-8"
             ),
         )
@@ -146,17 +125,15 @@ def update_entry(
     blog_id: int, blog_title: str, blog_path: Path, with_images: bool, publish: bool
 ):
     _convert(blog_path)
-    auth = auth.get()
+    auth = get_auth()
     if with_images:
         _update_images(blog_id, blog_title, blog_path, auth)
     _update_html(blog_id, blog_title, blog_path, publish, auth)
 
 
 def _update_images(blog_id: int, blog_title: str, blog_path: Path, auth: OAuth1):
-    with Spinner() as progress:
-        progress.add_task("Updating images...")
-        _delete_images(blog_id, auth)
-        _upload_images(blog_title, blog_path, auth)
+    _delete_images(blog_id, auth)
+    _upload_images(blog_title, blog_path, auth)
 
 
 def _update_html(
@@ -165,7 +142,7 @@ def _update_html(
     with Spinner() as progress:
         progress.add_task("Updating HTML...")
 
-        with open(blog_path.with_suffix("html"), mode="r") as file:
+        with open(blog_path.with_suffix(".html"), mode="r") as file:
             content = file.read()
 
         username = get_config("blog:username")
@@ -176,23 +153,24 @@ def _update_html(
             timeout=None,
             headers={"Content-Type": "application/xml; charset=utf-8"},
             data=f"""\
-    <?xml version="1.0" encoding="utf-8"?>
-    <entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
-        <title>{blog_title}</title>
-        <author><name>name</name></author>
-        <content type="text/html"><![CDATA[{content}]]></content>
-        <app:control><app:draft>{'no' if publish else 'yes'}</app:draft></app:control>
-    </entry>""".encode(
+<?xml version="1.0" encoding="utf-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
+    <title>{blog_title}</title>
+    <author><name>name</name></author>
+    <content type="text/html"><![CDATA[{content}]]></content>
+    <app:control><app:draft>{'no' if publish else 'yes'}</app:draft></app:control>
+</entry>""".encode(
                 "utf-8"
             ),
         )
+
         if res.status_code != 200:
             print("[red]Error while updating HTML.")
             raise typer.Abort()
 
 
 def delete_entry(blog_id: int, with_images: bool):
-    auth = auth.get()
+    auth = get_auth()
     if with_images:
         _delete_images(blog_id, auth)
     _delete_html(blog_id, auth)
@@ -203,7 +181,7 @@ def _delete_images(blog_id: int, auth: OAuth1):
         username = get_config("blog:username")
         domain = get_config("blog:domain")
         res = requests.get(
-            f"{_HATENA_BLOG_URL}/{username}/{domain}/{blog_id}",
+            f"{_HATENA_BLOG_URL}/{username}/{domain}/atom/entry/{blog_id}",
             auth=auth,
             timeout=None,
         )
@@ -221,7 +199,6 @@ def _delete_images(blog_id: int, auth: OAuth1):
         task = progress.add_task("Deleting images...", total=total)
 
         def callback(match: re.Match):
-            progress.advance(task, 1)
             image_path = parse.unquote(match.group(1))
             image_id = os.path.splitext(os.path.basename(image_path))[0]
             res = requests.delete(
@@ -230,6 +207,7 @@ def _delete_images(blog_id: int, auth: OAuth1):
             if res.status_code != 200:
                 print("[red]Error while deleting image.")
                 raise typer.Abort()
+            progress.advance(task, 1)
 
         re.sub(image_pattern, callback, content)
 
@@ -241,7 +219,7 @@ def _delete_html(blog_id: int, auth: OAuth1):
         username = get_config("blog:username")
         domain = get_config("blog:domain")
         res = requests.delete(
-            f"{_HATENA_BLOG_URL}/{username}/{domain}/{blog_id}",
+            f"{_HATENA_BLOG_URL}/{username}/{domain}/atom/entry/{blog_id}",
             auth=auth,
             timeout=None,
         )
