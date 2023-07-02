@@ -4,13 +4,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
-## [Unreleased] - 2023-07-02
- 
+## [Unreleased] - 2023-07-03
+
 ### Added
  
 ### Changed
  
 ### Fixed
+
+## [1.0.1] - 2023-07-02
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Fix major bugs in API functionalities.
+- Fix issues where the CLI launches user authentication every time.
 
 ## [1.0.0] - 2023-07-01
  
