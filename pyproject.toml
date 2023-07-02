@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hatena-cli"
-version = "0.1.0"
+version = "1.0.1"
 description = ""
 authors = ["Taichi Maeda <taichi.maeda.up@gmail.com>"]
 readme = "README.md"
@@ -20,6 +20,7 @@ beautifulsoup4 = "^4.12.2"
 typing-extensions = "^4.7.0"
 toml = "^0.10.2"
 flatdict = "^4.0.1"
+lxml = "^4.9.2"
 
 
 [build-system]
